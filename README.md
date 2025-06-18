@@ -1,4 +1,4 @@
-# Use AWS Secrets Manager secrets in GitHub jobs
+# Use AWS Secrets Manager secrets in GitHub jobs - testing
 
 To use a secret in a GitHub job, you can use a GitHub action to retrieve secrets from AWS Secrets Manager and add them as masked [Environment variables](https://docs.github.com/en/actions/learn-github-actions/environment-variables) in your GitHub workflow. For more information about GitHub Actions, see [Understanding GitHub Actions](https://docs.github.com/en/actions/learn-github-actions/understanding-github-actions) in the *GitHub Docs*.
 
