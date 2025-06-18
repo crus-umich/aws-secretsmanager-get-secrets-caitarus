@@ -1,4 +1,5 @@
 name: Tests
+
 on:
   pull_request:
     branches:
@@ -6,77 +7,146 @@ on:
   push:
     branches:
       - main
-env:
-  INTEG_TEST_ROLE: "arn:aws:iam::829732496883:role/github-integration-test"
-  DEFAULT_REGION: "us-west-2"
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
-  tests:
+  unit-tests:
     runs-on: ubuntu-latest
-    name: Run unit and integration tests
-    # These permissions are needed to interact with GitHub's OIDC Token endpoint.
-    permissions:
-      id-token: write
-      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-      - name: Run unit tests
+        uses: actions/checkout@v4
+      - name: Run Unit Tests
         run: |
           npm ci
           npm run test
       - name: Codecov
-        uses: codecov/codecov-action@v3.1.1
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: ${{ env.INTEG_TEST_ROLE }}
-          aws-region: ${{ env.DEFAULT_REGION }}
-      - name: Test Get Secrets Action
-        # Run your local version of the action
+        uses: codecov/codecov-action@v5.4.2
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  uppercase-transformation-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
         uses: ./
         with:
-          secret-ids: |
-            test/*
-            SECRET_ALIAS,app/secret
+          name-transformation: uppercase
           parse-json-secrets: true
-      - name: Test Expected Values
-        run: |
-          if [ "${TEST_SECRET_1}" != "test1" ]; then
-          echo "TEST_SECRET_1 is not expected value"
-          exit 1
-          fi
-          if [ "${TEST_SECRET_2}" != "test2" ]; then
-          echo "TEST_SECRET_2 is not expected value"
-          exit 1
-          fi
-          if [ "${TEST_DATABASE_USERNAME}" != "admin" ]; then
-          echo "TEST_DATABASE_USERNAME is not expected value"
-          exit 1
-          fi
-          if [ "${TEST_DATABASE_PASSWORD}" != "test" ]; then
-          echo "TEST_DATABASE_PASSWORD is not expected value"
-          exit 1
-          fi
-          if [ "${TEST_DATABASE_HOST}" != "127.0.0.1" ]; then
-          echo "TEST_DATABASE_HOST is not expected value"
-          exit 1
-          fi
-          if [ "${TEST_DATABASE_PORT}" != "3600" ]; then
-          echo "TEST_DATABASE_PORT is not expected value"
-          exit 1
-          fi
-          if [ "${TEST_DATABASE_DBNAME}" != "test" ]; then
-          echo "TEST_DATABASE_DBNAME is not expected value"
-          exit 1
-          fi
-          if [ "${SECRET_ALIAS_USERNAME}" != "api_user" ]; then
-          echo "SECRET_ALIAS_USERNAME is not expected value"
-          exit 1
-          fi
-          if [ "${SECRET_ALIAS_API_KEY}" != "key" ]; then
-          echo "SECRET_ALIAS_API_KEY is not expected value"
-          exit 1
-          fi
-          echo "Tests passed"
-          exit 0
+          secret-ids: |
+              SampleSecret1
+              /special/chars/secret
+              0/special/chars/secret
+              PrefixSecret*
+              JsonSecret
+              SAMPLESECRET1_ALIAS, SampleSecret1
+      - name: Assert
+        run: npm run integration-test __integration_tests__/name_transformation/uppercase.test.ts
+
+  lowercase-transformation-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
+        uses: ./
+        with:
+          name-transformation: lowercase
+          parse-json-secrets: true
+          secret-ids: |
+              SampleSecret1
+              /special/chars/secret
+              0/special/chars/secret
+              PrefixSecret*
+              JsonSecret
+              samplesecret1_alias, SampleSecret1
+      - name: Assert
+        run: npm run integration-test __integration_tests__/name_transformation/lowercase.test.ts
+
+  none-transformation-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
+        uses: ./
+        with:
+          name-transformation: none
+          parse-json-secrets: true
+          secret-ids: |
+              SampleSecret1
+              /special/chars/secret
+              0/special/chars/secret
+              PrefixSecret*
+              JsonSecret
+              SampleSecret1_Alias, SampleSecret1
+      - name: Assert
+        run: npm run integration-test __integration_tests__/name_transformation/none.test.ts
+
+  default-name-transformation-param-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
+        uses: ./
+        with:
+          parse-json-secrets: true
+          secret-ids: |
+              SampleSecret1
+              /special/chars/secret
+              0/special/chars/secret
+              PrefixSecret*
+              JsonSecret
+              SAMPLESECRET1_ALIAS, SampleSecret1
+      - name: Assert
+        run: npm run integration-test __integration_tests__/name_transformation/uppercase.test.ts
+
+  default-parse-json-secrets-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+      - name: Act
+        uses: ./
+        with:
+          secret-ids: JsonSecret
+      - name: Assert Default Is No Json Secrets
+        run: npm run integration-test __integration_tests__/parse_json_secrets.test.ts
+
+  af-south-1-integration-test:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        uses: ./.github/actions/build
+        with:
+          aws-region: af-south-1
+      - name: Act
+        uses: ./
+        with:
+          secret-ids: JsonSecret
+          auto-select-family-attempt-timeout: '2000'
+      - name: Assert
+        run: npm run integration-test __integration_tests__/parse_json_secrets.test.ts
